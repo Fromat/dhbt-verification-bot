@@ -13,6 +13,12 @@ app.get("/", (req, res) => {
   res.send("DHBT Verification Bot is running ✅");
 });
 
+// ✅ Telegram'dan gelen mesajları loglamak için webhook endpoint'i
+app.post("/webhook", express.json(), (req, res) => {
+  console.log(JSON.stringify(req.body, null, 2)); // 🔍 tüm Telegram verisini logla
+  res.sendStatus(200);
+});
+
 // ✅ 2. Elle test için kanal üyelik doğrulama (senin eski kodun)
 app.get("/verify", async (req, res) => {
   const { userId } = req.query;
