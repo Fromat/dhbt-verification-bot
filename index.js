@@ -1,10 +1,11 @@
+
 import express from "express";
 import fetch from "node-fetch";
 
 const app = express();
 
 const TOKEN = process.env.BOT_TOKEN; // Telegram bot token
-const CHAT_ID = process.env.CHAT_ID; // Kanal ID'si
+const DEFAULT_CHAT_ID = process.env.CHAT_ID; // Varsayılan kanal ID'si
 
 app.use(express.json());
 
@@ -19,21 +20,32 @@ app.post("/webhook", express.json(), (req, res) => {
   res.sendStatus(200);
 });
 
-// ✅ 2. Elle test için kanal üyelik doğrulama (senin eski kodun)
+// ✅ 2. Elle test için kanal üyelik doğrulama (dinamik chatId destekli)
 app.get("/verify", async (req, res) => {
-  const { userId } = req.query;
+  const { userId, chatId } = req.query;
   if (!userId) return res.json({ success: false, error: "userId required" });
+
+  // Eğer chatId verilmemişse varsayılanı kullan
+  const targetChatId = chatId || DEFAULT_CHAT_ID;
 
   try {
     const resp = await fetch(
-      `https://api.telegram.org/bot${TOKEN}/getChatMember?chat_id=${CHAT_ID}&user_id=${userId}`
+      `https://api.telegram.org/bot${TOKEN}/getChatMember?chat_id=${targetChatId}&user_id=${userId}`
     );
     const data = await resp.json();
 
     if (data.ok && data.result.status !== "left") {
-      res.json({ success: true, message: "Kullanıcı kanalda ✅" });
+      res.json({
+        success: true,
+        message: "Kullanıcı kanalda ✅",
+        chatId: targetChatId,
+      });
     } else {
-      res.json({ success: false, message: "Kullanıcı kanalda değil ❌" });
+      res.json({
+        success: false,
+        message: "Kullanıcı kanalda değil ❌",
+        chatId: targetChatId,
+      });
     }
   } catch (err) {
     console.error(err);
@@ -66,8 +78,11 @@ app.post(`/webhook/${TOKEN}`, async (req, res) => {
 
     // Kanal üyeliğini kontrol et
     try {
+      // 🔹 Artık mesajla gelen verideki chat_id veya varsayılan kanal kullanılacak
+      const checkChatId = DEFAULT_CHAT_ID;
+
       const check = await fetch(
-        `https://api.telegram.org/bot${TOKEN}/getChatMember?chat_id=${CHAT_ID}&user_id=${chatId}`
+        `https://api.telegram.org/bot${TOKEN}/getChatMember?chat_id=${checkChatId}&user_id=${chatId}`
       );
       const data = await check.json();
 
