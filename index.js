@@ -1,4 +1,3 @@
-
 import express from "express";
 import fetch from "node-fetch";
 
@@ -16,36 +15,27 @@ app.get("/", (req, res) => {
 
 // ✅ Telegram'dan gelen mesajları loglamak için webhook endpoint'i
 app.post("/webhook", express.json(), (req, res) => {
-  console.log(JSON.stringify(req.body, null, 2)); // 🔍 tüm Telegram verisini logla
+  console.log(JSON.stringify(req.body, null, 2)); // 🔍 Telegram verisini logla
   res.sendStatus(200);
 });
 
-// ✅ 2. Elle test için kanal üyelik doğrulama (dinamik chatId destekli)
+// ✅ 2. Elle test için kanal üyelik doğrulama
 app.get("/verify", async (req, res) => {
   const { userId, chatId } = req.query;
   if (!userId) return res.json({ success: false, error: "userId required" });
 
-  // Eğer chatId verilmemişse varsayılanı kullan
-  const targetChatId = chatId || DEFAULT_CHAT_ID;
+  const CHAT_ID = chatId || DEFAULT_CHAT_ID;
 
   try {
     const resp = await fetch(
-      `https://api.telegram.org/bot${TOKEN}/getChatMember?chat_id=${targetChatId}&user_id=${userId}`
+      `https://api.telegram.org/bot${TOKEN}/getChatMember?chat_id=${CHAT_ID}&user_id=${userId}`
     );
     const data = await resp.json();
 
     if (data.ok && data.result.status !== "left") {
-      res.json({
-        success: true,
-        message: "Kullanıcı kanalda ✅",
-        chatId: targetChatId,
-      });
+      res.json({ success: true, message: "Kullanıcı kanalda ✅" });
     } else {
-      res.json({
-        success: false,
-        message: "Kullanıcı kanalda değil ❌",
-        chatId: targetChatId,
-      });
+      res.json({ success: false, message: "Kullanıcı kanalda değil ❌" });
     }
   } catch (err) {
     console.error(err);
@@ -67,7 +57,7 @@ app.post(`/webhook/${TOKEN}`, async (req, res) => {
   // Kullanıcı /start <uniqueAppId> ile geldiyse
   if (text.startsWith("/start")) {
     const parts = text.split(" ");
-    const uniqueAppId = parts[1]; // örn: /start 8b1a9953c4611296a827abf8c47804d7
+    const uniqueAppId = parts[1];
 
     if (!uniqueAppId) {
       await fetch(
@@ -78,11 +68,8 @@ app.post(`/webhook/${TOKEN}`, async (req, res) => {
 
     // Kanal üyeliğini kontrol et
     try {
-      // 🔹 Artık mesajla gelen verideki chat_id veya varsayılan kanal kullanılacak
-      const checkChatId = DEFAULT_CHAT_ID;
-
       const check = await fetch(
-        `https://api.telegram.org/bot${TOKEN}/getChatMember?chat_id=${checkChatId}&user_id=${chatId}`
+        `https://api.telegram.org/bot${TOKEN}/getChatMember?chat_id=${DEFAULT_CHAT_ID}&user_id=${chatId}`
       );
       const data = await check.json();
 
