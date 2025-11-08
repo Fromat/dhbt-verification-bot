@@ -4,39 +4,47 @@ import fetch from "node-fetch";
 const app = express();
 
 const TOKEN = process.env.BOT_TOKEN; // Telegram bot token
-const DEFAULT_CHAT_ID = process.env.CHAT_ID; // Varsayılan kanal ID'si
+const DEFAULT_CHAT_ID = process.env.CHAT_ID; // Eski varsayılan kanal
+const CHANNELS = process.env.CHANNEL_IDS
+  ? process.env.CHANNEL_IDS.split(",")
+  : [DEFAULT_CHAT_ID]; // Çoklu kanal desteği
 
 app.use(express.json());
 
 // ✅ 1. Sunucu kontrol
 app.get("/", (req, res) => {
-  res.send("DHBT Verification Bot is running ✅");
+  res.send("DHBT Multi Verification Bot is running ✅");
 });
 
 // ✅ Telegram'dan gelen mesajları loglamak için webhook endpoint'i
-app.post("/webhook", express.json(), (req, res) => {
-  console.log(JSON.stringify(req.body, null, 2)); // 🔍 Telegram verisini logla
+app.post("/webhook", (req, res) => {
+  console.log(JSON.stringify(req.body, null, 2));
   res.sendStatus(200);
 });
 
 // ✅ 2. Elle test için kanal üyelik doğrulama
 app.get("/verify", async (req, res) => {
-  const { userId, chatId } = req.query;
+  const { userId } = req.query;
   if (!userId) return res.json({ success: false, error: "userId required" });
 
-  const CHAT_ID = chatId || DEFAULT_CHAT_ID;
-
   try {
-    const resp = await fetch(
-      `https://api.telegram.org/bot${TOKEN}/getChatMember?chat_id=${CHAT_ID}&user_id=${userId}`
+    const results = await Promise.all(
+      CHANNELS.map(async (chatId) => {
+        const resp = await fetch(
+          `https://api.telegram.org/bot${TOKEN}/getChatMember?chat_id=${chatId}&user_id=${userId}`
+        );
+        const data = await resp.json();
+        return data.ok && data.result.status !== "left";
+      })
     );
-    const data = await resp.json();
 
-    if (data.ok && data.result.status !== "left") {
-      res.json({ success: true, message: "Kullanıcı kanalda ✅" });
-    } else {
-      res.json({ success: false, message: "Kullanıcı kanalda değil ❌" });
-    }
+    const allJoined = results.every((r) => r);
+    res.json({
+      success: allJoined,
+      message: allJoined
+        ? "✅ Kullanıcı tüm kanallarda"
+        : "❌ Kullanıcı bazı kanallarda yok",
+    });
   } catch (err) {
     console.error(err);
     res.json({ success: false, error: err.message });
@@ -46,7 +54,7 @@ app.get("/verify", async (req, res) => {
 // ✅ 3. Unity ile eşleştirme için basit veri tabanı (RAM'de tutulur)
 const verifiedUsers = {};
 
-// ✅ 4. Telegram'dan gelen mesajları dinle
+// ✅ 4. Telegram webhook /start yakalama
 app.post(`/webhook/${TOKEN}`, async (req, res) => {
   const message = req.body.message;
   if (!message || !message.text) return res.sendStatus(200);
@@ -54,7 +62,6 @@ app.post(`/webhook/${TOKEN}`, async (req, res) => {
   const chatId = message.chat.id;
   const text = message.text;
 
-  // Kullanıcı /start <uniqueAppId> ile geldiyse
   if (text.startsWith("/start")) {
     const parts = text.split(" ");
     const uniqueAppId = parts[1];
@@ -66,21 +73,28 @@ app.post(`/webhook/${TOKEN}`, async (req, res) => {
       return res.sendStatus(200);
     }
 
-    // Kanal üyeliğini kontrol et
     try {
-      const check = await fetch(
-        `https://api.telegram.org/bot${TOKEN}/getChatMember?chat_id=${DEFAULT_CHAT_ID}&user_id=${chatId}`
+      // 🔄 Tüm kanalları sırayla kontrol et
+      const results = await Promise.all(
+        CHANNELS.map(async (cId) => {
+          const check = await fetch(
+            `https://api.telegram.org/bot${TOKEN}/getChatMember?chat_id=${cId}&user_id=${chatId}`
+          );
+          const data = await check.json();
+          return data.ok && data.result.status !== "left";
+        })
       );
-      const data = await check.json();
 
-      if (data.ok && data.result.status !== "left") {
+      const allJoined = results.every((r) => r);
+
+      if (allJoined) {
         verifiedUsers[uniqueAppId] = true;
         await fetch(
-          `https://api.telegram.org/bot${TOKEN}/sendMessage?chat_id=${chatId}&text=✅ Kanal üyeliğin doğrulandı! Uygulamaya geri dönebilirsin.`
+          `https://api.telegram.org/bot${TOKEN}/sendMessage?chat_id=${chatId}&text=✅ Tüm kanallarda üyeliğin doğrulandı! Uygulamaya geri dönebilirsin.`
         );
       } else {
         await fetch(
-          `https://api.telegram.org/bot${TOKEN}/sendMessage?chat_id=${chatId}&text=❌ Lütfen önce kanala katıl ve sonra tekrar dene.`
+          `https://api.telegram.org/bot${TOKEN}/sendMessage?chat_id=${chatId}&text=❌ Lütfen tüm gerekli kanallara katıl ve tekrar dene.`
         );
       }
     } catch (err) {
@@ -107,4 +121,4 @@ app.get("/check", (req, res) => {
   res.json({ verified: isVerified });
 });
 
-app.listen(10000, () => console.log("Server started on port 10000"));
+app.listen(10000, () => console.log("✅ Server started on port 10000"));
