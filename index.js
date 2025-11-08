@@ -19,6 +19,28 @@ app.post("/webhook", (req, res) => {
   res.sendStatus(200);
 });
 
+// replace your existing /verify handler with this debug version
+app.get("/verify", async (req, res) => {
+  const { userId, chatId } = req.query;
+  if (!userId) return res.status(400).json({ success: false, error: "userId required" });
+
+  const targetChat = chatId || DEFAULT_CHAT_ID;
+  try {
+    const resp = await fetch(
+      `https://api.telegram.org/bot${TOKEN}/getChatMember?chat_id=${encodeURIComponent(targetChat)}&user_id=${encodeURIComponent(userId)}`
+    );
+    const data = await resp.json();
+
+    // log both in server logs and return to client for debugging
+    console.log("DEBUG getChatMember response:", JSON.stringify(data, null, 2));
+    return res.status(200).json({ debug: true, chatId: targetChat, userId, telegramResponse: data });
+  } catch (err) {
+    console.error("DEBUG Telegram API error:", err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
 // ✅ Unity'den gelen doğrulama isteği
 // Örnek: /check?userId=123456789&chatId=-1001234567890
 app.get("/check", async (req, res) => {
